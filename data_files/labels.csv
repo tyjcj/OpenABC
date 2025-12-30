@@ -1,0 +1,7 @@
+file,ip_name,syn_id,step_id,pi,po,num_nodes,and_nodes,not_edges,edge_count,depth
+ac97_ctrl_syn0_step0.pt,ac97_ctrl,0,0,2339,2137,15940,11464,14326,25065,11
+ac97_ctrl_syn1499_step0.pt,ac97_ctrl,1499,0,2339,2137,15940,11464,14326,25065,11
+ac97_ctrl_syn1_step0.pt,ac97_ctrl,1,0,2339,2137,15940,11464,14326,25065,11
+bp_be_syn553_step0.pt,bp_be,553,0,11592,8413,102519,82514,109608,173441,86
+pci_syn1121_step0.pt,pci,1121,0,3429,3157,26133,19547,25719,42251,29
+ss_pcm_syn1499_step0.pt,ss_pcm,1499,0,104,90,597,403,462,896,8
