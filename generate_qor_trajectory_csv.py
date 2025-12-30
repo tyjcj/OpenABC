@@ -105,37 +105,49 @@ def extract_area_delay_from_stime(output: str) -> Tuple[Optional[float], Optiona
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Generate per-step mapped QoR trajectory (Area/Delay) CSV.")
-    ap.add_argument("--bench", default="bench_openabcd/ac97_ctrl_orig.bench", help="Input .bench path")
+    ap = argparse.ArgumentParser(description="Generate per-step mapped QoR trajectory (Area/Delay) CSV for all .bench files in a directory.")
+    ap.add_argument("--bench-dir", required=True, help="Directory containing .bench files (required)")
     ap.add_argument("--lib", default="abc/Nangate45_typ.lib", help="Liberty library path")
     ap.add_argument("--abc-bin", default="yosys-abc", help="ABC binary (default: yosys-abc)")
     ap.add_argument("--script-dir", default="bench_openabcd/referenceScripts/referenceScripts", help="Directory containing abcN.script")
     ap.add_argument("--recipe-start", type=int, default=0, help="First recipe id (abcN.script)")
     ap.add_argument("--recipe-end", type=int, default=10, help="Last recipe id (inclusive)")
-    ap.add_argument("--out", default="qor_trajectory_ac97_ctrl.csv", help="Output CSV path")
+    ap.add_argument("--out", default="qor_trajectory_all.csv", help="Output CSV path")
     ap.add_argument("--bias", type=float, default=0.9, help="map -B bias value (default: 0.9)")
     ap.add_argument("--steps", type=int, default=20, help="Number of heuristic steps (default: 20)")
     args = ap.parse_args()
 
     repo_root = Path.cwd()
-    bench_path = (repo_root / args.bench).resolve() if not Path(args.bench).is_absolute() else Path(args.bench)
+    
+    # 处理bench目录
+    bench_dir = (repo_root / args.bench_dir).resolve() if not Path(args.bench_dir).is_absolute() else Path(args.bench_dir)
+    if not bench_dir.exists():
+        raise FileNotFoundError(f"bench directory not found: {bench_dir}")
+    if not bench_dir.is_dir():
+        raise NotADirectoryError(f"{bench_dir} is not a directory")
+    
+    # 获取目录下所有.bench文件
+    bench_files = list(bench_dir.glob("*.bench"))
+    if not bench_files:
+        raise FileNotFoundError(f"No .bench files found in {bench_dir}")
+    print(f"Found {len(bench_files)} .bench files in {bench_dir}")
+
     lib_path = (repo_root / args.lib).resolve() if not Path(args.lib).is_absolute() else Path(args.lib)
     script_dir = (repo_root / args.script_dir).resolve() if not Path(args.script_dir).is_absolute() else Path(args.script_dir)
 
-    if not bench_path.exists():
-        raise FileNotFoundError(f"bench not found: {bench_path}")
     if not lib_path.exists():
         raise FileNotFoundError(f"lib not found: {lib_path}")
     if not script_dir.exists():
         raise FileNotFoundError(f"script-dir not found: {script_dir}")
 
-    design = bench_path.name  # keep full filename, e.g. ac97_ctrl_orig.bench
     recipes = list(range(args.recipe_start, args.recipe_end + 1))
 
+    # 构建CSV头部
     header = ["Design", "Recipe"]
     for k in range(1, args.steps + 1):
         header += [f"delay_{k}", f"area_{k}"]
 
+    # 准备输出文件
     out_csv = (repo_root / args.out).resolve() if args.out != "-" else None
     out_fh = None
     if out_csv is not None:
@@ -144,43 +156,54 @@ def main() -> int:
         except PermissionError:
             out_csv = None
             print("WARNING: cannot write CSV output file; re-run with --out - to print CSV to stdout")
+    
     try:
         writer = csv.writer(out_fh if out_fh is not None else __import__("sys").stdout)
         writer.writerow(header)
 
-        for rid in recipes:
-            script_path = script_dir / f"abc{rid}.script"
-            if not script_path.exists():
-                raise FileNotFoundError(f"missing script: {script_path}")
+        # 遍历每个bench文件
+        for bench_path in bench_files:
+            design = bench_path.name  # 保留完整文件名，例如 ac97_ctrl_orig.bench
+            print(f"Processing {design}...")
 
-            lines = read_script_lines(script_path)
-            steps = extract_heuristic_steps(lines, expected_len=args.steps)
-            recipe_abbrev = "; ".join(abbreviate_steps(steps))
+            # 遍历每个recipe
+            for rid in recipes:
+                script_path = script_dir / f"abc{rid}.script"
+                if not script_path.exists():
+                    raise FileNotFoundError(f"missing script: {script_path}")
 
-            row: List[object] = [design, recipe_abbrev]
-            for k in range(1, args.steps + 1):
-                prefix = "; ".join(steps[:k])
-                cmd = (
-                    f"read_lib {lib_path.as_posix()}; "
-                    f"read_bench {bench_path.as_posix()}; "
-                    f"strash; "
-                    f"{prefix + '; ' if prefix else ''}"
-                    f"map -B {args.bias}; topo; stime -c"
-                )
-                out = run_abc(args.abc_bin, cmd, cwd=repo_root)
-                area, delay = extract_area_delay_from_stime(out)
-                row += [
-                    "" if delay is None else f"{delay:.2f}",
-                    "" if area is None else f"{area:.2f}",
-                ]
+                lines = read_script_lines(script_path)
+                steps = extract_heuristic_steps(lines, expected_len=args.steps)
+                recipe_abbrev = "; ".join(abbreviate_steps(steps))
 
-            writer.writerow(row)
+                row: List[object] = [design, recipe_abbrev]
+                # 遍历每个步骤
+                for k in range(1, args.steps + 1):
+                    prefix = "; ".join(steps[:k])
+                    cmd = (
+                        f"read_lib {lib_path.as_posix()}; "
+                        f"read_bench {bench_path.as_posix()}; "
+                        f"strash; "
+                        f"{prefix + '; ' if prefix else ''}"
+                        f"map -B {args.bias}; topo; stime -c"
+                    )
+                    out = run_abc(args.abc_bin, cmd, cwd=repo_root)
+                    area, delay = extract_area_delay_from_stime(out)
+                    row += [
+                        "" if delay is None else f"{delay:.2f}",
+                        "" if area is None else f"{area:.2f}",
+                    ]
+
+                writer.writerow(row)
+        
+        print(f"Successfully processed all {len(bench_files)} bench files")
+
     finally:
         if out_fh is not None:
             out_fh.close()
 
     if out_csv is not None:
-        print(f"Wrote {out_csv}")
+        print(f"Wrote results to {out_csv}")
     return 0
 
 

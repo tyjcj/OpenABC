@@ -113,7 +113,7 @@ def main() -> int:
     ap.add_argument("--recipe-start", type=int, default=0, help="First recipe id (abcN.script)")
     ap.add_argument("--recipe-end", type=int, default=10, help="Last recipe id (inclusive)")
     ap.add_argument("--out", default="qor_trajectory_ac97_ctrl.csv", help="Output CSV path")
-    ap.add_argument("--bias", type=float, default=0, help="map -B bias value (default: 0.9)")
+    ap.add_argument("--bias", type=float, default=0.9, help="map -B bias value (default: 0.9)")
     ap.add_argument("--steps", type=int, default=20, help="Number of heuristic steps (default: 20)")
     args = ap.parse_args()
 
